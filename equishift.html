@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EquiShift: Decent Work & Transparency Platform (SDG 8)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Alpine.js for lightweight reactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased min-h-screen" x-data="equiShiftApp()" x-init="initApp()">
+
+    <!-- Toast Notification Overlay -->
+    <div x-show="toast.show" x-cloak
+         x-transition:enter="transition ease-out duration-300 transform"
+         x-transition:enter-start="opacity-0 translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200 transform"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-2"
+         class="fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 border text-sm font-medium backdrop-blur-md"
+         :class="{
+             'bg-emerald-950/90 text-emerald-200 border-emerald-500/50': toast.type === 'success',
+             'bg-amber-950/90 text-amber-200 border-amber-500/50': toast.type === 'warning',
+             'bg-rose-950/90 text-rose-200 border-rose-500/50': toast.type === 'danger',
+             'bg-teal-950/90 text-teal-200 border-teal-500/50': toast.type === 'info'
+         }">
+        <i :class="{
+            'fa-solid fa-circle-check text-lg': toast.type === 'success',
+            'fa-solid fa-triangle-exclamation text-lg': toast.type === 'warning',
+            'fa-solid fa-circle-xmark text-lg': toast.type === 'danger',
+            'fa-solid fa-circle-info text-lg': toast.type === 'info'
+        }"></i>
+        <span x-text="toast.message"></span>
+    </div>
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900/90 backdrop-blur-md text-white border-b border-slate-800 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <!-- Brand Logo -->
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-tr from-teal-500 to-emerald-400 p-2.5 rounded-xl text-slate-950 shadow-lg shadow-teal-500/20">
+                    <i class="fa-solid fa-scale-balanced text-xl font-bold"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-teal-400 to-emerald-300 bg-clip-text text-transparent">EquiShift</h1>
+                    <p class="text-[11px] text-slate-400 font-medium">UN SDG 8: Decent Work & Economic Growth Platform</p>
+                </div>
+            </div>
+
+            <!-- Role Switcher & Sector Selectors -->
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Sector Selector -->
+                <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <span class="text-xs font-semibold px-2.5 text-slate-400"><i class="fa-solid fa-building-flag mr-1.5 text-teal-400"></i>Sector:</span>
+                    <select x-model="selectedSector" @change="onSectorChange()" class="bg-slate-900 text-teal-300 text-xs font-bold rounded-lg px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer">
+                        <option value="Construction">🏗️ Construction Site</option>
+                        <option value="Healthcare">🏥 Healthcare Facility</option>
+                        <option value="Manufacturing">🏭 Manufacturing Line</option>
+                        <option value="Campus">🎓 Campus Support</option>
+                    </select>
+                </div>
+
+                <!-- Mode Switcher & Protected Admin Auth -->
+                <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button @click="switchRole('worker')" 
+                            :class="currentRole === 'worker' ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white font-medium'" 
+                            class="px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center space-x-1.5">
+                        <i class="fa-solid fa-hard-hat"></i>
+                        <span>Worker Portal</span>
+                    </button>
+                    
+                    <button @click="switchRole('employer')" 
+                            :class="currentRole === 'employer' ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white font-medium'" 
+                            class="px-3.5 py-1.5 rounded-lg text-xs transition-all flex items-center space-x-1.5 relative">
+                        <i :class="isAdminAuthenticated ? 'fa-solid fa-chart-pie' : 'fa-solid fa-lock text-amber-400'"></i>
+                        <span>Executive Admin</span>
+                    </button>
+
+                    <!-- Authenticated Admin Session Badge & Sign Out -->
+                    <template x-if="isAdminAuthenticated">
+                        <div class="flex items-center pl-2 ml-1 border-l border-slate-800 space-x-2">
+                            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1">
+                                <i class="fa-solid fa-user-shield text-[9px] text-emerald-400"></i> Admin Active
+                            </span>
+                            <button @click="logoutAdmin()" class="text-xs text-rose-400 hover:text-rose-300 px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 transition border border-rose-500/20 font-semibold" title="Sign Out Admin">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6">
+
+        <!-- ========================================================================= -->
+        <!-- ======================= WORKER INTERFACE SECTION ======================= -->
+        <!-- ========================================================================= -->
+        <section x-show="currentRole === 'worker'" class="space-y-6" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-3" x-transition:enter-end="opacity-100 translate-y-0">
+            
+            <!-- Worker Header & Dynamic Sector Banner -->
+            <div class="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+                    <div class="space-y-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-extrabold px-3 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                                <i :class="getSectorData().icon"></i>
+                                <span x-text="getSectorData().name"></span>
+                            </span>
+                            <span class="text-xs text-slate-400 font-mono" x-text="'ID: ' + worker.id"></span>
+                        </div>
+                        <h2 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                            <span>Welcome, <span x-text="worker.name"></span></span> 👋
+                        </h2>
+                        <p class="text-xs text-slate-300 flex items-center space-x-2">
+                            <span>Status:</span>
+                            <span class="font-bold px-2 py-0.5 rounded-md text-[11px]" 
+                                  :class="worker.isCheckedIn ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'">
+                                <i class="fa-solid fa-circle text-[8px] mr-1" :class="worker.isCheckedIn ? 'text-emerald-400 animate-pulse' : 'text-slate-500'"></i>
+                                <span x-text="worker.isCheckedIn ? getSectorData().activeStatusText : 'Checked Out'"></span>
+                            </span>
+                        </p>
+                    </div>
+
+                    <!-- Accessibility Controls: Multilingual & Speech Audio -->
+                    <div class="flex items-center space-x-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                        <button @click="speakStatus()" class="bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 px-3 py-2 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+                            <i class="fa-solid fa-volume-high text-teal-400" :class="speaking ? 'animate-bounce text-amber-400' : ''"></i>
+                            <span x-text="speaking ? 'Reading Aloud...' : 'Read Aloud'"></span>
+                        </button>
+                        
+                        <select x-model="worker.language" class="bg-slate-900 text-slate-200 text-xs font-semibold focus:outline-none px-2.5 py-2 rounded-lg border border-slate-700 cursor-pointer">
+                            <option value="en">English</option>
+                            <option value="hi">हिंदी (Hindi)</option>
+                            <option value="ta">தமிழ் (Tamil)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Sector Specific Fatigue / Alert -->
+                <div x-show="worker.overtimeHours >= getSectorData().fatigueThreshold" class="mt-4 bg-amber-950/40 border border-amber-500/40 rounded-xl p-3 flex items-start space-x-3 text-amber-200 text-xs">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base mt-0.5"></i>
+                    <div>
+                        <strong class="text-amber-300 font-bold" x-text="getSectorData().fatigueTitle"></strong>: 
+                        <span x-text="getSectorData().fatigueMessage"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Worker Action Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                <!-- 1. Check-In & Overtime Counter -->
+                <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:border-slate-700 transition">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="p-3 bg-teal-500/10 text-teal-400 rounded-xl border border-teal-500/20">
+                                <i :class="getSectorData().icon + ' text-xl'"></i>
+                            </div>
+                            <span class="text-[10px] uppercase font-mono tracking-wider bg-slate-950 text-slate-400 px-2.5 py-1 rounded-full border border-slate-800" x-text="getSectorData().checkInType"></span>
+                        </div>
+                        <h3 class="font-bold text-base text-white" x-text="getSectorData().checkInTitle"></h3>
+                        <p class="text-xs text-slate-400 mt-1" x-text="getSectorData().checkInSub"></p>
+                        
+                        <div class="my-4 bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Standard Shift:</span>
+                                <span class="font-semibold text-slate-200" x-text="getSectorData().standardShift"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Logged Overtime:</span>
+                                <span class="font-bold text-amber-400" x-text="worker.overtimeHours + ' Hours'"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Est. Overtime Wage:</span>
+                                <span class="font-bold text-emerald-400" x-text="'₹' + (worker.overtimeHours * getSectorData().hourlyOtRate).toLocaleString()"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button @click="toggleCheckIn()" 
+                        :class="worker.isCheckedIn ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold'"
+                        class="w-full py-3 rounded-xl font-semibold text-xs transition shadow-lg flex items-center justify-center space-x-2">
+                        <i :class="worker.isCheckedIn ? 'fa-solid fa-right-from-bracket' : 'fa-solid fa-qrcode'"></i>
+                        <span x-text="worker.isCheckedIn ? getSectorData().checkOutBtn : getSectorData().checkInBtn"></span>
+                    </button>
+                </div>
+
+                <!-- 2. Sector Safety Checklist & Reporter -->
+                <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:border-slate-700 transition">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+                                <i class="fa-solid fa-shield-halved text-xl"></i>
+                            </div>
+                            <span class="text-[10px] uppercase font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">100% Anonymous</span>
+                        </div>
+                        <h3 class="font-bold text-base text-white">Safety Protocol Checklist</h3>
+                        <p class="text-xs text-slate-400 mt-1">Complete pre-shift check & record hazards via voice or text.</p>
+                        
+                        <div class="my-3 space-y-1.5">
+                            <template x-for="(item, idx) in getSectorData().safetyChecklist" :key="idx">
+                                <label class="flex items-center space-x-2 bg-slate-950 p-2 rounded-lg border border-slate-800 text-xs text-slate-300 cursor-pointer hover:bg-slate-850">
+                                    <input type="checkbox" x-model="item.checked" class="rounded text-teal-500 focus:ring-teal-500 bg-slate-800 border-slate-700">
+                                    <span :class="item.checked ? 'line-through text-slate-500' : ''" x-text="item.label"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <button @click="openReportModal('safety')" class="py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl font-bold text-xs transition flex items-center justify-center space-x-1">
+                            <i class="fa-solid fa-microphone text-amber-400"></i>
+                            <span>Voice Hazard</span>
+                        </button>
+                        <button @click="openReportModal('feedback')" class="py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-xl font-semibold text-xs transition flex items-center justify-center space-x-1">
+                            <i class="fa-solid fa-user-ninja"></i>
+                            <span>Whistleblower</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. Skill Passport & Payslip -->
+                <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-sm flex flex-col justify-between hover:border-slate-700 transition">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                                <i class="fa-solid fa-id-card text-xl"></i>
+                            </div>
+                            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">Verified Ledger</span>
+                        </div>
+                        <h3 class="font-bold text-base text-white" x-text="getSectorData().passportTitle"></h3>
+                        <p class="text-xs text-slate-400 mt-1">Portable career credentials & verified work history.</p>
+                        
+                        <div class="my-4 space-y-2">
+                            <template x-for="(skill, idx) in getSectorData().skills" :key="idx">
+                                <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between">
+                                    <div>
+                                        <div class="text-xs font-bold text-teal-300" x-text="skill.name"></div>
+                                        <div class="text-[10px] text-slate-400" x-text="skill.issuer"></div>
+                                    </div>
+                                    <span class="text-[10px] bg-emerald-950 text-emerald-400 font-bold px-2 py-0.5 rounded border border-emerald-800" x-text="skill.hours"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <button @click="showPayslipModal = true" class="w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl font-semibold text-xs transition flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-file-invoice-dollar text-emerald-400"></i>
+                        <span>View Transparent Payslip</span>
+                    </button>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================================================================= -->
+        <!-- ====================== ADMIN / EMPLOYER DASHBOARD ======================= -->
+        <!-- ========================================================================= -->
+        <section x-show="currentRole === 'employer'" class="space-y-6" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-3" x-transition:enter-end="opacity-100 translate-y-0">
+            
+            <!-- Executive Banner -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 p-6 rounded-2xl border border-slate-800">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-extrabold px-3 py-0.5 rounded-full uppercase" x-text="selectedSector + ' Executive Telemetry'"></span>
+                        <span class="text-xs text-slate-400 font-mono" x-text="'Location: ' + getSectorData().location"></span>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-white mt-1">Decent Work Compliance & Risk Intelligence</h2>
+                    <p class="text-xs text-slate-400">Real-time metrics for workforce safety, overtime compliance, and shift satisfaction.</p>
+                </div>
+
+                <div class="flex items-center space-x-3">
+                    <button @click="refreshDashboard()" class="bg-slate-950 hover:bg-slate-800 text-slate-300 text-xs font-semibold px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-arrows-rotate text-teal-400"></i>
+                        <span>Live Sync</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Executive KPI Cards Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Active Staff On-Site</p>
+                            <h4 class="text-2xl font-black text-white mt-1" x-text="getSectorData().adminKpis.activeCount"></h4>
+                        </div>
+                        <div class="p-3 bg-teal-500/10 text-teal-400 rounded-xl border border-teal-500/20">
+                            <i :class="getSectorData().icon + ' text-lg'"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-3"><span class="text-emerald-400 font-bold" x-text="getSectorData().adminKpis.attendanceRate"></span> attendance rate</p>
+                </div>
+
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-[11px] text-slate-400 font-bold uppercase tracking-wider" x-text="getSectorData().adminKpis.riskLabel"></p>
+                            <h4 class="text-2xl font-black text-amber-400 mt-1" x-text="getSectorData().adminKpis.riskValue"></h4>
+                        </div>
+                        <div class="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+                            <i class="fa-solid fa-battery-quarter text-lg"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-3" x-text="getSectorData().adminKpis.riskSub"></p>
+                </div>
+
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Active Hazard Tickets</p>
+                            <h4 class="text-2xl font-black text-rose-400 mt-1" x-text="getSectorData().adminKpis.pendingHazards"></h4>
+                        </div>
+                        <div class="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20">
+                            <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-3"><span class="text-emerald-400 font-bold" x-text="getSectorData().adminKpis.resolvedCount + ' resolved'"></span> this period</p>
+                </div>
+
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Predicted Attrition Rate</p>
+                            <h4 class="text-2xl font-black text-indigo-400 mt-1" x-text="getSectorData().adminKpis.attritionRate"></h4>
+                        </div>
+                        <div class="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20">
+                            <i class="fa-solid fa-chart-line text-lg"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-3">AI predictive model active</p>
+                </div>
+            </div>
+
+            <!-- Dynamic Chart.js 3-Graph Suite -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Chart 1: Attendance & Overtime Trends -->
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-xs text-white flex items-center gap-1.5">
+                            <i class="fa-solid fa-chart-column text-teal-400"></i>
+                            <span>Attendance & Overtime Hours</span>
+                        </h3>
+                        <span class="text-[10px] font-mono bg-slate-950 text-slate-400 px-2 py-0.5 rounded border border-slate-800">Weekly</span>
+                    </div>
+                    <div class="h-60 relative">
+                        <canvas id="overtimeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Attrition Risk vs Workload Pressure -->
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-xs text-white flex items-center gap-1.5">
+                            <i class="fa-solid fa-radar text-indigo-400"></i>
+                            <span>Workload vs Burnout Index</span>
+                        </h3>
+                        <span class="text-[10px] font-mono bg-slate-950 text-slate-400 px-2 py-0.5 rounded border border-slate-800">Index Scale</span>
+                    </div>
+                    <div class="h-60 relative">
+                        <canvas id="attritionChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Active Hazard Status Breakdown -->
+                <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-xs text-white flex items-center gap-1.5">
+                            <i class="fa-solid fa-pie-chart text-amber-400"></i>
+                            <span>Hazard Ticket Status</span>
+                        </h3>
+                        <span class="text-[10px] font-mono bg-slate-950 text-slate-400 px-2 py-0.5 rounded border border-slate-800">Tickets Logged</span>
+                    </div>
+                    <div class="h-60 relative">
+                        <canvas id="hazardChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic Active Staff On-Site Section -->
+            <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                        <h3 class="font-bold text-lg text-white flex items-center gap-2">
+                            <i class="fa-solid fa-users text-teal-400"></i>
+                            <span>Active On-Site Staff Directory</span>
+                        </h3>
+                        <p class="text-xs text-slate-400">Live roster of checked-in workers, shift duration, and real-time fatigue badges for <span class="text-teal-300 font-semibold" x-text="selectedSector"></span>.</p>
+                    </div>
+
+                    <!-- Filter Control -->
+                    <div class="flex items-center space-x-2">
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+                            <input type="text" x-model="staffSearchQuery" placeholder="Search staff or role..." class="bg-slate-950 text-xs border border-slate-800 rounded-xl pl-8 pr-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 w-48 sm:w-64">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 uppercase tracking-wider font-semibold">
+                                <th class="py-3 px-3">Staff Member</th>
+                                <th class="py-3 px-3">Role / Specialty</th>
+                                <th class="py-3 px-3">Shift Status</th>
+                                <th class="py-3 px-3">Start Time</th>
+                                <th class="py-3 px-3">Overtime</th>
+                                <th class="py-3 px-3 text-right">Fatigue / Risk Level</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            <template x-for="person in filteredStaffList()" :key="person.id">
+                                <tr class="hover:bg-slate-950/60 transition">
+                                    <td class="py-3 px-3 font-medium">
+                                        <div class="flex items-center space-x-2.5">
+                                            <div class="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-[11px] text-teal-400" x-text="person.name.substring(0, 2)"></div>
+                                            <div>
+                                                <div class="text-white font-semibold" x-text="person.name"></div>
+                                                <div class="text-[10px] text-slate-500 font-mono" x-text="person.id"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-3 px-3 text-slate-300 font-medium" x-text="person.role"></td>
+                                    <td class="py-3 px-3">
+                                        <span class="px-2 py-0.5 rounded-md font-semibold text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800/80 flex items-center w-fit gap-1">
+                                            <i class="fa-solid fa-circle text-[6px] text-emerald-400 animate-pulse"></i>
+                                            <span x-text="person.status"></span>
+                                        </span>
+                                    </td>
+                                    <td class="py-3 px-3 text-slate-400 font-mono" x-text="person.startTime"></td>
+                                    <td class="py-3 px-3 font-semibold" :class="person.overtime > 2 ? 'text-amber-400' : 'text-slate-300'" x-text="person.overtime + ' hrs'"></td>
+                                    <td class="py-3 px-3 text-right">
+                                        <span class="px-2.5 py-1 rounded-full font-bold text-[10px]"
+                                              :class="{
+                                                  'bg-emerald-950 text-emerald-400 border border-emerald-800': person.fatigueRisk === 'Low (Normal)',
+                                                  'bg-amber-950 text-amber-400 border border-amber-800': person.fatigueRisk === 'Moderate (Watch)',
+                                                  'bg-rose-950 text-rose-400 border border-rose-800': person.fatigueRisk === 'High Risk (Rest Needed)'
+                                              }" x-text="person.fatigueRisk"></span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Activity Hazard Ticket Description Section -->
+            <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                        <h3 class="font-bold text-lg text-white flex items-center gap-2">
+                            <i class="fa-solid fa-clipboard-list text-amber-400"></i>
+                            <span>Activity Hazard Tickets Log</span>
+                        </h3>
+                        <p class="text-xs text-slate-400">Detailed worker-reported safety events, severity levels, and resolution workflow for <span class="text-teal-300 font-semibold" x-text="selectedSector"></span>.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <template x-for="ticket in getSectorData().adminTickets" :key="ticket.id">
+                        <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition">
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="font-mono text-[11px] text-slate-400 font-bold" x-text="ticket.id"></span>
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                                              :class="{
+                                                  'bg-rose-950 text-rose-400 border border-rose-800': ticket.severity === 'Critical' || ticket.severity === 'High',
+                                                  'bg-amber-950 text-amber-400 border border-amber-800': ticket.severity === 'Medium',
+                                                  'bg-slate-900 text-slate-300 border border-slate-800': ticket.severity === 'Low'
+                                              }" x-text="ticket.severity + ' Severity'"></span>
+                                    </div>
+                                    <span class="text-[10px] font-mono text-slate-500" x-text="ticket.timestamp"></span>
+                                </div>
+
+                                <h4 class="font-bold text-sm text-white flex items-center gap-1.5">
+                                    <i :class="ticket.type === 'Safety Hazard' ? 'fa-solid fa-triangle-exclamation text-amber-400' : 'fa-solid fa-user-secret text-indigo-400'"></i>
+                                    <span x-text="ticket.hazardName"></span>
+                                </h4>
+
+                                <p class="text-xs text-slate-300 leading-relaxed" x-text="ticket.desc"></p>
+
+                                <div class="pt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
+                                    <div><i class="fa-solid fa-location-dot text-teal-400 mr-1"></i><span x-text="ticket.location"></span></div>
+                                    <div><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i><span x-text="ticket.anonymous ? 'Anonymous Worker' : 'Verified ID'"></span></div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 pt-3 border-t border-slate-900 flex justify-between items-center">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                                      :class="{
+                                          'bg-emerald-950 text-emerald-400 border border-emerald-800': ticket.status === 'Resolved',
+                                          'bg-amber-950 text-amber-400 border border-amber-800': ticket.status === 'Investigating',
+                                          'bg-rose-950 text-rose-400 border border-rose-800': ticket.status === 'Escalated'
+                                      }" x-text="ticket.status"></span>
+
+                                <button x-show="ticket.status !== 'Resolved'" @click="resolveTicket(ticket)" class="text-teal-400 hover:text-teal-300 text-xs font-bold underline bg-teal-500/10 px-3 py-1 rounded-lg border border-teal-500/20">
+                                    Mark Action Complete
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Brief Analysis of Predicted Attrition Section -->
+            <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-sm space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">AI Attrition Intelligence</span>
+                            <span class="text-xs text-indigo-400 font-mono" x-text="'Sector: ' + selectedSector"></span>
+                        </div>
+                        <h3 class="text-xl font-extrabold text-white mt-1">Workforce Attrition Risk & Root-Cause Analysis</h3>
+                        <p class="text-xs text-slate-400">AI-modeled attrition drivers, fatigue metrics, and recommended retention policies aligned with SDG 8.</p>
+                    </div>
+
+                    <div class="flex items-center space-x-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <div class="text-center px-2">
+                            <span class="block text-[10px] text-slate-400 font-bold uppercase">High Risk Count</span>
+                            <span class="text-lg font-black text-rose-400" x-text="getSectorData().attritionAnalysis.highRiskCount"></span>
+                        </div>
+                        <div class="h-8 w-px bg-slate-800"></div>
+                        <div class="text-center px-2">
+                            <span class="block text-[10px] text-slate-400 font-bold uppercase">Medium Risk Count</span>
+                            <span class="text-lg font-black text-amber-400" x-text="getSectorData().attritionAnalysis.medRiskCount"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Key Attrition Drivers -->
+                    <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3">
+                        <h4 class="font-bold text-sm text-white flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+                            <span>Primary Sector Attrition Drivers</span>
+                        </h4>
+                        <p class="text-xs text-slate-400" x-text="getSectorData().attritionAnalysis.summary"></p>
+                        
+                        <div class="space-y-2 mt-2">
+                            <template x-for="driver in getSectorData().attritionAnalysis.drivers" :key="driver.title">
+                                <div class="bg-slate-900 p-3 rounded-lg border border-slate-850">
+                                    <div class="flex justify-between items-center text-xs">
+                                        <span class="font-bold text-slate-200" x-text="driver.title"></span>
+                                        <span class="font-extrabold text-rose-400 font-mono" x-text="driver.percentage + '% Impact'"></span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-400 mt-1" x-text="driver.desc"></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Actionable Intervention Plan -->
+                    <div class="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-3 flex flex-col justify-between">
+                        <div>
+                            <h4 class="font-bold text-sm text-white flex items-center gap-2">
+                                <i class="fa-solid fa-lightbulb text-teal-400"></i>
+                                <span>Actionable AI Intervention Plan</span>
+                            </h4>
+                            <p class="text-xs text-slate-400 mb-3">Targeted HR and operational shifts to reduce predicted attrition by up to 45%.</p>
+                            
+                            <ul class="space-y-2 text-xs">
+                                <template x-for="action in getSectorData().attritionAnalysis.interventions" :key="action">
+                                    <li class="flex items-start space-x-2 text-slate-300">
+                                        <i class="fa-solid fa-circle-check text-emerald-400 text-sm mt-0.5"></i>
+                                        <span x-text="action"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+
+                        <button @click="showToast('Intervention policy dispatched to HR & Site Managers', 'success')" class="w-full mt-4 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 font-bold text-xs rounded-xl shadow hover:from-teal-400 hover:to-emerald-400 transition">
+                            Deploy Sector Retention Policy
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- ========================================================================= -->
+    <!-- ============================= MODALS ==================================== -->
+    <!-- ========================================================================= -->
+
+    <!-- Modal 0: Admin RBAC Login Modal -->
+    <div x-show="showAdminLoginModal" x-cloak class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative overflow-hidden">
+            <div class="absolute -right-12 -top-12 w-32 h-32 bg-teal-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-2.5">
+                    <div class="p-2 bg-slate-950 rounded-xl border border-slate-800 text-teal-400">
+                        <i class="fa-solid fa-user-shield text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base text-white">Executive Admin Access</h3>
+                        <p class="text-[11px] text-slate-400">Protected SDG 8 Management Portal</p>
+                    </div>
+                </div>
+                <button @click="showAdminLoginModal = false" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-300 leading-relaxed">
+                Authentication required to access workforce telemetry, safety compliance metrics, and AI attrition predictive analytics.
+            </p>
+
+            <form @submit.prevent="authenticateAdmin()" class="space-y-3.5">
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Username</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-user absolute left-3 top-3 text-slate-500 text-xs"></i>
+                        <input type="text" x-model="loginForm.username" placeholder="Enter admin username" class="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Password</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-key absolute left-3 top-3 text-slate-500 text-xs"></i>
+                        <input type="password" x-model="loginForm.password" placeholder="Enter password" class="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500" required>
+                    </div>
+                </div>
+
+                <div x-show="loginError" class="text-xs text-rose-400 font-semibold bg-rose-950/40 p-2.5 rounded-lg border border-rose-500/30 flex items-center space-x-2">
+                    <i class="fa-solid fa-circle-exclamation text-rose-400"></i>
+                    <span>Invalid administrator credentials. Try demo login below.</span>
+                </div>
+
+                <div class="pt-2 flex flex-col sm:flex-row gap-2">
+                    <button type="button" @click="fillDemoCredentials()" class="w-full sm:w-1/2 py-2.5 bg-slate-950 hover:bg-slate-800 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-bolt text-amber-400"></i>
+                        <span>Fill Demo Login</span>
+                    </button>
+                    <button type="submit" class="w-full sm:w-1/2 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow transition flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-right-to-bracket"></i>
+                        <span>Authenticate</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 1: Transparent Payslip Breakdown -->
+    <div x-show="showPayslipModal" x-cloak class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-file-invoice-dollar text-emerald-400 text-xl"></i>
+                    <h3 class="font-bold text-lg text-white">Verified Transparent Payslip</h3>
+                </div>
+                <button @click="showPayslipModal = false" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-2 text-xs">
+                <div class="flex justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">Worker ID & Name:</span>
+                    <span class="font-bold text-white" x-text="worker.id + ' (' + worker.name + ')'"></span>
+                </div>
+                <div class="flex justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">Sector / Industry:</span>
+                    <span class="font-bold text-teal-300" x-text="selectedSector"></span>
+                </div>
+                <div class="flex justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">Base Salary (Regular Hours):</span>
+                    <span class="font-semibold text-slate-200" x-text="'₹' + getSectorData().payslip.baseSalary.toLocaleString()"></span>
+                </div>
+                <div class="flex justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">Overtime Bonus (<span x-text="worker.overtimeHours"></span> hrs):</span>
+                    <span class="font-bold text-emerald-400" x-text="'+ ₹' + (worker.overtimeHours * getSectorData().hourlyOtRate).toLocaleString()"></span>
+                </div>
+                <div class="flex justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">Sector Safety Allowance:</span>
+                    <span class="font-semibold text-teal-400" x-text="'+ ₹' + getSectorData().payslip.allowance.toLocaleString()"></span>
+                </div>
+                <div class="flex justify-between bg-emerald-950/40 p-3.5 rounded-xl border border-emerald-500/30 text-sm font-bold">
+                    <span class="text-emerald-300">Total Net Payout:</span>
+                    <span class="text-emerald-400 text-base" x-text="'₹' + (getSectorData().payslip.baseSalary + (worker.overtimeHours * getSectorData().hourlyOtRate) + getSectorData().payslip.allowance).toLocaleString()"></span>
+                </div>
+            </div>
+
+            <div class="pt-2 flex justify-between items-center">
+                <span class="text-[10px] text-slate-400"><i class="fa-solid fa-lock text-emerald-400 mr-1"></i> SDG 8 Fair Pay Hash Verified</span>
+                <button @click="showPayslipModal = false; showToast('Payslip downloaded/printed successfully', 'success')" class="bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 font-bold text-xs px-5 py-2.5 rounded-xl shadow">
+                    Download PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Voice & Text Safety Report -->
+    <div x-show="showReportModal" x-cloak class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-lg text-white" x-text="reportType === 'safety' ? '🚨 Log Hazard Ticket' : '🛡️ Anonymous Whistleblower'"></h3>
+                <button @click="showReportModal = false" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-400" x-text="reportType === 'safety' ? 'Record a voice note or describe unsafe conditions in ' + selectedSector + '.' : 'Your identity is fully protected with anonymous hashing. Share workplace concerns safely.'"></p>
+
+            <div class="space-y-3">
+                <textarea x-model="reportInputText" rows="4" placeholder="Describe the incident or tap 'Record Voice'..." class="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500"></textarea>
+                
+                <div class="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs">
+                    <div class="flex items-center space-x-2 text-slate-300">
+                        <i class="fa-solid fa-microphone text-teal-400" :class="recording ? 'animate-pulse text-amber-400' : ''"></i>
+                        <span x-text="recording ? 'Listening... Speak now' : 'Voice-to-Text Speech Engine'"></span>
+                    </div>
+                    <button @click="toggleVoiceRecord()" class="px-3 py-1.5 rounded-lg font-bold text-xs transition flex items-center space-x-1"
+                            :class="recording ? 'bg-rose-600 text-white' : 'bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-500/30'">
+                        <i :class="recording ? 'fa-solid fa-stop' : 'fa-solid fa-microphone'"></i>
+                        <span x-text="recording ? 'Stop' : 'Record Voice'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button @click="showReportModal = false" class="px-4 py-2 bg-slate-800 text-slate-300 font-semibold text-xs rounded-xl hover:bg-slate-750">Cancel</button>
+                <button @click="submitReport()" class="px-5 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 font-bold text-xs rounded-xl shadow hover:from-teal-400 hover:to-emerald-400">Submit Securely</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        function equiShiftApp() {
+            return {
+                currentRole: 'worker',
+                isAdminAuthenticated: false,
+                showAdminLoginModal: false,
+                loginForm: { username: '', password: '' },
+                loginError: false,
+
+                selectedSector: 'Construction',
+                showPayslipModal: false,
+                showReportModal: false,
+                reportType: 'safety',
+                reportInputText: '',
+                speaking: false,
+                recording: false,
+                recognition: null,
+                staffSearchQuery: '',
+                
+                toast: { show: false, message: '', type: 'info' },
+
+                switchRole(role) {
+                    if (role === 'employer' && !this.isAdminAuthenticated) {
+                        this.loginError = false;
+                        this.showAdminLoginModal = true;
+                        return;
+                    }
+                    this.currentRole = role;
+                    if (role === 'employer') {
+                        this.$nextTick(() => { this.renderCharts(); });
+                    }
+                },
+
+                fillDemoCredentials() {
+                    this.loginForm.username = 'admin';
+                    this.loginForm.password = 'admin123';
+                    this.loginError = false;
+                },
+
+                authenticateAdmin() {
+                    if (this.loginForm.username === 'admin' && this.loginForm.password === 'admin123') {
+                        this.isAdminAuthenticated = true;
+                        this.currentRole = 'employer';
+                        this.showAdminLoginModal = false;
+                        this.loginError = false;
+                        this.loginForm.username = '';
+                        this.loginForm.password = '';
+                        this.showToast('Admin session authenticated successfully', 'success');
+                        this.$nextTick(() => { this.renderCharts(); });
+                    } else {
+                        this.loginError = true;
+                    }
+                },
+
+                logoutAdmin() {
+                    this.isAdminAuthenticated = false;
+                    this.currentRole = 'worker';
+                    this.showToast('Admin session signed out. Access locked.', 'info');
+                },
+
+                worker: {
+                    id: 'WRK-8842',
+                    name: 'Ramesh K.',
+                    isCheckedIn: true,
+                    overtimeHours: 3.5,
+                    language: 'en'
+                },
+
+                // Distinct Dynamic Sector Datasets
+                sectors: {
+                    Construction: {
+                        name: 'Construction Site',
+                        location: 'Site Alpha - High Rise Project',
+                        icon: 'fa-solid fa-helmet-safety',
+                        checkInTitle: 'Site GPS & Scaffolding Check-In',
+                        checkInSub: 'Scan building site QR or auto-verify via geofencing.',
+                        checkInType: 'GPS Location Active',
+                        activeStatusText: 'On Site (Active)',
+                        checkInBtn: 'Check In via Site QR',
+                        checkOutBtn: 'Check Out of Building Site',
+                        standardShift: '07:30 AM - 04:30 PM',
+                        hourlyOtRate: 250,
+                        fatigueThreshold: 3,
+                        fatigueTitle: 'Scaffolding & Thermal Fatigue Alert',
+                        fatigueMessage: '3+ hours overtime on high-rise scaffolding logged. Mandatory hydration break required.',
+                        safetyChecklist: [
+                            { label: 'Hard Hat & Harness Fastened', checked: true },
+                            { label: 'Scaffolding Anchors Inspected', checked: false },
+                            { label: 'Crane Drop-Zone Clearance Verified', checked: true }
+                        ],
+                        passportTitle: 'Construction & Rigging Skill Passport',
+                        skills: [
+                            { name: 'Scaffolding Safety Level II', issuer: 'Natl Safety Board', hours: '450 Hrs' },
+                            { name: 'Structural Welding & Rigging', issuer: 'BuildCert Council', hours: '1,200 Hrs' }
+                        ],
+                        payslip: { baseSalary: 24500, allowance: 2000 },
+                        adminKpis: {
+                            activeCount: '142 Workers',
+                            attendanceRate: '94.2%',
+                            riskLabel: 'Thermal / Harness Risk',
+                            riskValue: '38 Staff',
+                            riskSub: 'Rest rotation active',
+                            pendingHazards: '7 Pending',
+                            resolvedCount: '18',
+                            attritionRate: '14.8%'
+                        },
+                        // Distinct Chart Datasets
+                        charts: {
+                            otLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                            attendance: [135, 140, 142, 138, 145, 110, 40],
+                            overtime: [1.5, 2.0, 3.5, 2.8, 4.0, 3.0, 0],
+                            attritionLabels: ['Heat Exposure', 'Unpaid OT', 'Hazard Severity', 'Wage Delay', 'Commute'],
+                            workloadIndex: [85, 90, 78, 65, 40],
+                            burnoutRisk: [88, 72, 95, 50, 30],
+                            hazardCounts: [4, 7, 18], // Escalated, Pending, Resolved
+                            hazardColors: ['#f43f5e', '#f59e0b', '#10b981']
+                        },
+                        staffList: [
+                            { id: 'C-101', name: 'Rajesh Kumar', role: 'Tower Crane Operator', status: 'Active Duty', startTime: '07:30 AM', overtime: 3.5, fatigueRisk: 'High Risk (Rest Needed)' },
+                            { id: 'C-102', name: 'Amit Singh', role: 'Scaffolding Specialist', status: 'Active Duty', startTime: '07:30 AM', overtime: 2.0, fatigueRisk: 'Moderate (Watch)' },
+                            { id: 'C-103', name: 'Suresh Patel', role: 'Structural Welder', status: 'Active Duty', startTime: '08:00 AM', overtime: 1.0, fatigueRisk: 'Low (Normal)' },
+                            { id: 'C-104', name: 'Vikram Das', role: 'Site Safety Marshal', status: 'Active Duty', startTime: '07:00 AM', overtime: 4.0, fatigueRisk: 'High Risk (Rest Needed)' },
+                            { id: 'C-105', name: 'Manoj Verma', role: 'Concrete Mixer Op', status: 'Active Duty', startTime: '07:30 AM', overtime: 0.5, fatigueRisk: 'Low (Normal)' }
+                        ],
+                        adminTickets: [
+                            { id: 'TKT-C88', timestamp: 'Today, 10:15 AM', type: 'Safety Hazard', hazardName: 'Loose Scaffolding Clamp', desc: 'Loose bracket detected on 12th-floor exterior scaffolding. Risk of metal pipe falling onto pedestrian zone.', location: 'Block A - 12th Floor', severity: 'Critical', anonymous: true, status: 'Escalated' },
+                            { id: 'TKT-C89', timestamp: 'Today, 08:30 AM', type: 'Safety Hazard', hazardName: 'Defective Fall Harness', desc: 'Snap hook latch on safety belt harness #44 is slipping under tension.', location: 'Zone B Masonry', severity: 'High', anonymous: false, status: 'Investigating' },
+                            { id: 'TKT-C90', timestamp: 'Yesterday', type: 'Whistleblower', hazardName: 'Overtime Logging Omission', desc: 'Supervisor requested 2 hours of extra concrete pouring without logging OT in portal.', location: 'Foundation Bay 3', severity: 'Medium', anonymous: true, status: 'Resolved' }
+                        ],
+                        attritionAnalysis: {
+                            highRiskCount: 22,
+                            medRiskCount: 45,
+                            summary: 'High physical exertion combined with extreme ambient heat and delayed overtime pay approval is accelerating site worker turnover.',
+                            drivers: [
+                                { title: 'Extreme Heat & Lack of Cooling Bay Access', percentage: 42, desc: '60% of workers report severe exhaustion during midday scaffolding tasks.' },
+                                { title: 'Unrecorded Overtime Hours', percentage: 28, desc: 'Delays in supervisor shift sign-offs lead to wage distrust.' },
+                                { title: 'Safety Equipment Wear', percentage: 18, desc: 'Outdated harnesses and worn steel-toe boots increase hazard anxiety.' }
+                            ],
+                            interventions: [
+                                'Enforce mandatory 15-minute hydration breaks for every 2 hours on scaffolding.',
+                                'Implement automated QR check-out wage calculation to eliminate unlogged overtime.',
+                                'Dispatch instantaneous replacement PPE kits upon ticket logging.'
+                            ]
+                        }
+                    },
+                    Healthcare: {
+                        name: 'Healthcare Facility',
+                        location: 'Ward 4B & ICU Operations',
+                        icon: 'fa-solid fa-hospital-user',
+                        checkInTitle: 'Clinical Ward & Biometric Punch',
+                        checkInSub: 'Verify presence in ICU, Emergency, or Sanitation wards.',
+                        checkInType: 'Biometric RFID Active',
+                        activeStatusText: 'In Ward (On Duty)',
+                        checkInBtn: 'Punch In to Ward',
+                        checkOutBtn: 'Punch Out of Ward Shift',
+                        standardShift: '08:00 PM - 08:00 AM (Night Shift)',
+                        hourlyOtRate: 320,
+                        fatigueThreshold: 2,
+                        fatigueTitle: '12+ Hour Consecutive Clinical Alert',
+                        fatigueMessage: 'You have completed extended triage coverage. Mandatory 20-min rest period triggered.',
+                        safetyChecklist: [
+                            { label: 'Sanitation & PPE Kit Donned', checked: true },
+                            { label: 'Sharps Guard & Needle Box Tested', checked: true },
+                            { label: 'Biological Spill Protocols Active', checked: false }
+                        ],
+                        passportTitle: 'Clinical & Triage Skill Passport',
+                        skills: [
+                            { name: 'ICU Triage & Infection Control', issuer: 'Health Standards Board', hours: '800 Hrs' },
+                            { name: 'Bio-Hazardous Waste Mgmt', issuer: 'MedCert Authority', hours: '620 Hrs' }
+                        ],
+                        payslip: { baseSalary: 28000, allowance: 3500 },
+                        adminKpis: {
+                            activeCount: '68 Staff',
+                            attendanceRate: '98.1%',
+                            riskLabel: 'Night Shift Burnout',
+                            riskValue: '19 Nurses',
+                            riskSub: 'Consecutive night shifts',
+                            pendingHazards: '3 Pending',
+                            resolvedCount: '24',
+                            attritionRate: '21.4%'
+                        },
+                        charts: {
+                            otLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                            attendance: [65, 68, 66, 68, 70, 68, 64],
+                            overtime: [3.0, 4.5, 2.0, 5.0, 4.0, 3.5, 2.0],
+                            attritionLabels: ['Night Burnout', 'Needle-Stick Risk', 'Ratio Pressure', 'Understaffing', 'Low Pay'],
+                            workloadIndex: [95, 80, 88, 92, 55],
+                            burnoutRisk: [92, 75, 84, 96, 60],
+                            hazardCounts: [1, 3, 24],
+                            hazardColors: ['#f43f5e', '#f59e0b', '#10b981']
+                        },
+                        staffList: [
+                            { id: 'H-201', name: 'Priya Sharma', role: 'ICU Senior Nurse', status: 'Active Duty', startTime: '08:00 PM', overtime: 4.5, fatigueRisk: 'High Risk (Rest Needed)' },
+                            { id: 'H-202', name: 'Dr. Aris Thorne', role: 'Emergency Triage Doc', status: 'Active Duty', startTime: '08:00 PM', overtime: 3.0, fatigueRisk: 'High Risk (Rest Needed)' },
+                            { id: 'H-203', name: 'Kavita Nair', role: 'Sanitation & Sterilization', status: 'Active Duty', startTime: '10:00 PM', overtime: 1.0, fatigueRisk: 'Low (Normal)' },
+                            { id: 'H-204', name: 'Sunil Menon', role: 'Ward Attendant', status: 'Active Duty', startTime: '08:00 PM', overtime: 2.5, fatigueRisk: 'Moderate (Watch)' }
+                        ],
+                        adminTickets: [
+                            { id: 'TKT-H12', timestamp: 'Today, 02:45 AM', type: 'Safety Hazard', hazardName: 'Sharps Disposal Bin Overflow', desc: 'Needle disposal bin in ICU Bay 4 is completely full; risk of accidental needle-stick injury.', location: 'ICU Ward 4B', severity: 'Critical', anonymous: true, status: 'Investigating' },
+                            { id: 'TKT-H13', timestamp: 'Yesterday', type: 'Safety Hazard', hazardName: 'Slippery Chemical Sanitizer Spill', desc: 'Concentrated disinfectant spilled near main corridor entrance, unflagged by maintenance.', location: 'Floor 2 Corridor', severity: 'Medium', anonymous: false, status: 'Resolved' }
+                        ],
+                        attritionAnalysis: {
+                            highRiskCount: 19,
+                            medRiskCount: 28,
+                            summary: 'Severe fatigue from double night shifts and high patient-to-nurse ratios is causing acute clinical burnout.',
+                            drivers: [
+                                { title: 'Consecutive 12-Hour Night Shifts', percentage: 50, desc: 'Lack of rotational days off causes severe cognitive and physical fatigue.' },
+                                { title: 'Nurse-to-Patient Ratio Overload', percentage: 30, desc: 'ICU ward staffing drops during night hours increase strain.' },
+                                { title: 'Inadequate Hazard Allowance', percentage: 20, desc: 'Bio-hazard pay is lower than regional healthcare standards.' }
+                            ],
+                            interventions: [
+                                'Cap consecutive night shifts to a maximum of 2 before mandatory 48-hour recovery.',
+                                'Deploy rotational support nursing staff during peak midnight triage hours.',
+                                'Increase hazardous clinical duty allowance by 15%.'
+                            ]
+                        }
+                    },
+                    Manufacturing: {
+                        name: 'Manufacturing Line',
+                        location: 'Assembly Line 3 - Automotive Component',
+                        icon: 'fa-solid fa-industry',
+                        checkInTitle: 'Line Station QR Punch',
+                        checkInSub: 'Scan assembly station QR to start piece-rate logging.',
+                        checkInType: 'Machine QR Code',
+                        activeStatusText: 'Assembly Line Active',
+                        checkInBtn: 'Scan Machine Station QR',
+                        checkOutBtn: 'Complete Line Shift',
+                        standardShift: '06:00 AM - 02:00 PM',
+                        hourlyOtRate: 280,
+                        fatigueThreshold: 2.5,
+                        fatigueTitle: 'LOTO & Noise Exposure Alert',
+                        fatigueMessage: '90+ dB ambient noise detected. Ensure ear protection and Lockout-Tagout protocols.',
+                        safetyChecklist: [
+                            { label: 'Lockout / Tagout (LOTO) Switches Cleared', checked: true },
+                            { label: 'E-Stop Red Button Tested', checked: true },
+                            { label: 'Ear Defenders & Goggles Sealed', checked: false }
+                        ],
+                        passportTitle: 'CNC & Machine Op Passport',
+                        skills: [
+                            { name: 'CNC Precision Machining', issuer: 'Polytechnic Inst', hours: '1,500 Hrs' },
+                            { name: 'LOTO Safety Master', issuer: 'Industrial Safety Board', hours: '950 Hrs' }
+                        ],
+                        payslip: { baseSalary: 26000, allowance: 2500 },
+                        adminKpis: {
+                            activeCount: '215 Line Ops',
+                            attendanceRate: '96.5%',
+                            riskLabel: 'Machine Downtime Risk',
+                            riskValue: '14 Units',
+                            riskSub: 'Maintenance dispatched',
+                            pendingHazards: '5 Pending',
+                            resolvedCount: '31',
+                            attritionRate: '9.2%'
+                        },
+                        charts: {
+                            otLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                            attendance: [210, 215, 212, 215, 208, 180, 0],
+                            overtime: [1.0, 1.5, 2.0, 1.5, 3.0, 2.5, 0],
+                            attritionLabels: ['Repetitive Strain', 'Noise Level', 'Quota Stress', 'Machinery Risk', 'Shift Timing'],
+                            workloadIndex: [90, 85, 75, 70, 50],
+                            burnoutRisk: [82, 78, 70, 65, 45],
+                            hazardCounts: [2, 5, 31],
+                            hazardColors: ['#f43f5e', '#f59e0b', '#10b981']
+                        },
+                        staffList: [
+                            { id: 'M-301', name: 'Deepak Rao', role: 'Robotic Arm Operator', status: 'Active Duty', startTime: '06:00 AM', overtime: 2.5, fatigueRisk: 'Moderate (Watch)' },
+                            { id: 'M-302', name: 'Sanjay Dutt', role: 'Stamping Press Op', status: 'Active Duty', startTime: '06:00 AM', overtime: 3.0, fatigueRisk: 'High Risk (Rest Needed)' },
+                            { id: 'M-303', name: 'Rohan Mehta', role: 'Quality Line Inspector', status: 'Active Duty', startTime: '06:00 AM', overtime: 1.0, fatigueRisk: 'Low (Normal)' }
+                        ],
+                        adminTickets: [
+                            { id: 'TKT-M44', timestamp: 'Today, 09:00 AM', type: 'Safety Hazard', hazardName: 'Press Safety Guard Interlock Bypass', desc: 'Emergency optical safety light curtain on Press #3 intermittently fails to trip machine stop.', location: 'Press Bay Line 3', severity: 'Critical', anonymous: true, status: 'Escalated' },
+                            { id: 'TKT-M45', timestamp: 'Yesterday', type: 'Safety Hazard', hazardName: 'Chemical Solvents Vapors', desc: 'Exhaust fan ducting clogged in component degreasing station.', location: 'Cleaning Cell B', severity: 'Medium', anonymous: false, status: 'Investigating' }
+                        ],
+                        attritionAnalysis: {
+                            highRiskCount: 12,
+                            medRiskCount: 30,
+                            summary: 'Repetitive motion strain and excessive floor noise levels drive operational fatigue and turnover among junior line operators.',
+                            drivers: [
+                                { title: 'High Decibel Noise & Mechanical Fatigue', percentage: 45, desc: 'Constant ambient noise exceeds 85 dB for over 6 hours per shift.' },
+                                { title: 'Aggressive Piece-Rate Quotas', percentage: 35, desc: 'Line speed increases without added rest breaks cause physical strain.' },
+                                { title: 'Repetitive Ergonomic Stress', percentage: 20, desc: 'Lack of station rotation leads to musculoskeletal complaints.' }
+                            ],
+                            interventions: [
+                                'Introduce mandatory hourly 5-minute ergonomic stretch pauses.',
+                                'Mandate 3-hour station rotation between heavy press and inspection units.',
+                                'Upgrade acoustic baffling surrounding stamping units.'
+                            ]
+                        }
+                    },
+                    Campus: {
+                        name: 'Campus Support',
+                        location: 'Academic Block B & Facilities',
+                        icon: 'fa-solid fa-graduation-cap',
+                        checkInTitle: 'Campus Zone Geofence',
+                        checkInSub: 'Check in at Library, Laboratories, Mess, or Grounds.',
+                        checkInType: 'Zone Geofence',
+                        activeStatusText: 'Campus Zone Active',
+                        checkInBtn: 'Punch In to Zone',
+                        checkOutBtn: 'Punch Out of Duty',
+                        standardShift: '08:30 AM - 05:30 PM',
+                        hourlyOtRate: 200,
+                        fatigueThreshold: 4,
+                        fatigueTitle: 'Extended Grounds Prep Shift',
+                        fatigueMessage: 'Event setup shift extended beyond 8 hours. Take a rest break in support lounge.',
+                        safetyChecklist: [
+                            { label: 'Lab Chemical Disposal Cleared', checked: true },
+                            { label: 'Lawnmower Guard Inspected', checked: false },
+                            { label: 'Mess Hall Sanitation Verified', checked: true }
+                        ],
+                        passportTitle: 'Facility & Maintenance Passport',
+                        skills: [
+                            { name: 'HVAC & Electrical Maintenance', issuer: 'Skill Academy', hours: '750 Hrs' },
+                            { name: 'Greenhouse & Grounds Mgmt', issuer: 'Campus Board', hours: '600 Hrs' }
+                        ],
+                        payslip: { baseSalary: 22000, allowance: 1500 },
+                        adminKpis: {
+                            activeCount: '42 Staff',
+                            attendanceRate: '92.0%',
+                            riskLabel: 'Event Overtime Load',
+                            riskValue: '8 Staff',
+                            riskSub: 'Campus event prep',
+                            pendingHazards: '1 Pending',
+                            resolvedCount: '12',
+                            attritionRate: '6.5%'
+                        },
+                        charts: {
+                            otLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                            attendance: [40, 42, 41, 42, 45, 25, 10],
+                            overtime: [0.5, 1.0, 0.5, 2.0, 4.0, 1.5, 0],
+                            attritionLabels: ['Seasonal Shifts', 'Wage Tier', 'Physical Heat', 'Overtime Delay', 'Equipment'],
+                            workloadIndex: [60, 75, 55, 45, 30],
+                            burnoutRisk: [50, 65, 48, 40, 25],
+                            hazardCounts: [0, 1, 12],
+                            hazardColors: ['#f43f5e', '#f59e0b', '#10b981']
+                        },
+                        staffList: [
+                            { id: 'S-401', name: 'Ganesh Pillai', role: 'HVAC Technician', status: 'Active Duty', startTime: '08:30 AM', overtime: 1.5, fatigueRisk: 'Low (Normal)' },
+                            { id: 'S-402', name: 'Lakshmi Bai', role: 'Lab Sanitation Lead', status: 'Active Duty', startTime: '08:30 AM', overtime: 0.5, fatigueRisk: 'Low (Normal)' }
+                        ],
+                        adminTickets: [
+                            { id: 'TKT-S05', timestamp: 'Today, 11:00 AM', type: 'Safety Hazard', hazardName: 'Exposed High-Voltage Cable', desc: 'Exposed wiring near central library walkway fountain poses electrical hazard.', location: 'Central Quad Walkway', severity: 'High', anonymous: false, status: 'Investigating' }
+                        ],
+                        attritionAnalysis: {
+                            highRiskCount: 3,
+                            medRiskCount: 8,
+                            summary: 'Low baseline wages and sporadic event-driven weekend overtime contribute to minor staff attrition.',
+                            drivers: [
+                                { title: 'Base Salary Gap vs Industry', percentage: 55, desc: 'Facilities staff wages trail municipal contractor averages.' },
+                                { title: 'Unscheduled Weekend Event Setup', percentage: 30, desc: 'Last-minute campus events force mandatory weekend attendance.' },
+                                { title: 'Outdoor Outdoor Heat Exposure', percentage: 15, desc: 'Groundskeeping during summer months lacks shaded rest zones.' }
+                            ],
+                            interventions: [
+                                'Implement a minimum 48-hour advance notice rule for campus event shifts.',
+                                'Adjust base hourly pay rate by 8% to align with regional standards.',
+                                'Provide portable misting tents for outdoor groundskeeping crews.'
+                            ]
+                        }
+                    }
+                },
+
+                getSectorData() {
+                    return this.sectors[this.selectedSector] || this.sectors.Construction;
+                },
+
+                filteredStaffList() {
+                    const list = this.getSectorData().staffList || [];
+                    if (!this.staffSearchQuery.trim()) return list;
+                    const q = this.staffSearchQuery.toLowerCase();
+                    return list.filter(s => s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
+                },
+
+                onSectorChange() {
+                    this.showToast(`Switched sector profile to ${this.selectedSector}`, 'info');
+                    this.$nextTick(() => {
+                        this.renderCharts();
+                    });
+                },
+
+                toggleCheckIn() {
+                    this.worker.isCheckedIn = !this.worker.isCheckedIn;
+                    const statusMsg = this.worker.isCheckedIn 
+                        ? `Checked in for ${this.selectedSector} shift!` 
+                        : `Checked out safely. Hours & overtime logged.`;
+                    this.showToast(statusMsg, this.worker.isCheckedIn ? 'success' : 'info');
+                },
+
+                showToast(message, type = 'info') {
+                    this.toast.message = message;
+                    this.toast.type = type;
+                    this.toast.show = true;
+                    setTimeout(() => { this.toast.show = false; }, 3500);
+                },
+
+                openReportModal(type) {
+                    this.reportType = type;
+                    this.reportInputText = '';
+                    this.showReportModal = true;
+                },
+
+                submitReport() {
+                    if (!this.reportInputText.trim()) {
+                        this.reportInputText = "Hazard reported via voice/text prompt.";
+                    }
+
+                    this.getSectorData().adminTickets.unshift({
+                        id: 'TKT-' + Math.floor(1000 + Math.random() * 9000),
+                        timestamp: 'Just Now',
+                        type: this.reportType === 'safety' ? 'Safety Hazard' : 'Whistleblower',
+                        hazardName: this.reportType === 'safety' ? 'User Reported Hazard' : 'Anonymous Grievance',
+                        desc: this.reportInputText,
+                        location: this.selectedSector + ' Zone',
+                        severity: 'High',
+                        anonymous: true,
+                        status: 'Investigating'
+                    });
+
+                    this.showToast('Ticket encrypted & transmitted to executive admin dashboard', 'success');
+                    this.showReportModal = false;
+                    this.renderCharts();
+                },
+
+                resolveTicket(ticket) {
+                    ticket.status = 'Resolved';
+                    this.showToast(`Ticket ${ticket.id} marked as resolved & closed`, 'success');
+                    this.renderCharts();
+                },
+
+                speakStatus() {
+                    if (!('speechSynthesis' in window)) {
+                        this.showToast('Text-to-Speech not supported in browser', 'warning');
+                        return;
+                    }
+
+                    if (this.speaking) {
+                        window.speechSynthesis.cancel();
+                        this.speaking = false;
+                        return;
+                    }
+
+                    const sector = this.getSectorData();
+                    const text = `EquiShift Voice Assistant. User ${this.worker.name}. Sector ${sector.name}. ` +
+                        `Shift status: ${this.worker.isCheckedIn ? sector.activeStatusText : 'Checked Out'}. ` +
+                        `Logged Overtime: ${this.worker.overtimeHours} hours. Keep safety protocols active.`;
+
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.onend = () => { this.speaking = false; };
+                    utterance.onerror = () => { this.speaking = false; };
+
+                    this.speaking = true;
+                    window.speechSynthesis.speak(utterance);
+                },
+
+                toggleVoiceRecord() {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if (!SpeechRecognition) {
+                        this.recording = true;
+                        setTimeout(() => {
+                            this.reportInputText = `[Voice Logged]: Safety hazard observed in ${this.selectedSector} station at ${new Date().toLocaleTimeString()}.`;
+                            this.recording = false;
+                            this.showToast('Simulated voice note captured', 'success');
+                        }, 1800);
+                        return;
+                    }
+
+                    if (this.recording && this.recognition) {
+                        this.recognition.stop();
+                        this.recording = false;
+                        return;
+                    }
+
+                    this.recognition = new SpeechRecognition();
+                    this.recognition.lang = this.worker.language === 'hi' ? 'hi-IN' : (this.worker.language === 'ta' ? 'ta-IN' : 'en-US');
+                    
+                    this.recognition.onstart = () => { this.recording = true; };
+                    this.recognition.onresult = (event) => {
+                        this.reportInputText = event.results[0][0].transcript;
+                        this.recording = false;
+                        this.showToast('Voice transcription complete', 'success');
+                    };
+                    this.recognition.onerror = () => { this.recording = false; };
+                    this.recognition.onend = () => { this.recording = false; };
+
+                    this.recognition.start();
+                },
+
+                refreshDashboard() {
+                    this.showToast('Live sector telemetry refreshed', 'info');
+                    this.renderCharts();
+                },
+
+                // Chart Instances
+                otChartInstance: null,
+                attChartInstance: null,
+                hzChartInstance: null,
+
+                initApp() {
+                    this.$nextTick(() => {
+                        this.renderCharts();
+                    });
+                },
+
+                renderCharts() {
+                    const sector = this.getSectorData();
+                    const cData = sector.charts;
+
+                    // Destroy existing chart instances to allow clean re-render with new colors and datasets
+                    if (this.otChartInstance) this.otChartInstance.destroy();
+                    if (this.attChartInstance) this.attChartInstance.destroy();
+                    if (this.hzChartInstance) this.hzChartInstance.destroy();
+
+                    // Chart 1: Attendance (Bar) & Overtime (Line) Combination
+                    const ctx1 = document.getElementById('overtimeChart');
+                    if (ctx1) {
+                        this.otChartInstance = new Chart(ctx1, {
+                            type: 'bar',
+                            data: {
+                                labels: cData.otLabels,
+                                datasets: [
+                                    {
+                                        type: 'bar',
+                                        label: 'Active Staff Count',
+                                        data: cData.attendance,
+                                        backgroundColor: 'rgba(13, 148, 136, 0.7)',
+                                        borderColor: '#0d9488',
+                                        borderWidth: 1,
+                                        yAxisID: 'y'
+                                    },
+                                    {
+                                        type: 'line',
+                                        label: 'Avg Overtime (Hrs)',
+                                        data: cData.overtime,
+                                        borderColor: '#f59e0b',
+                                        backgroundColor: '#f59e0b',
+                                        borderWidth: 3,
+                                        tension: 0.3,
+                                        pointRadius: 4,
+                                        yAxisID: 'y1'
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
+                                scales: {
+                                    x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+                                    y: { type: 'linear', position: 'left', ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+                                    y1: { type: 'linear', position: 'right', ticks: { color: '#f59e0b' }, grid: { drawOnChartArea: false } }
+                                }
+                            }
+                        });
+                    }
+
+                    // Chart 2: Attrition Risk vs Workload Comparison
+                    const ctx2 = document.getElementById('attritionChart');
+                    if (ctx2) {
+                        this.attChartInstance = new Chart(ctx2, {
+                            type: 'radar',
+                            data: {
+                                labels: cData.attritionLabels,
+                                datasets: [
+                                    {
+                                        label: 'Workload Pressure',
+                                        data: cData.workloadIndex,
+                                        backgroundColor: 'rgba(99, 102, 241, 0.25)',
+                                        borderColor: '#6366f1',
+                                        pointBackgroundColor: '#6366f1'
+                                    },
+                                    {
+                                        label: 'Burnout Index',
+                                        data: cData.burnoutRisk,
+                                        backgroundColor: 'rgba(244, 63, 94, 0.25)',
+                                        borderColor: '#f43f5e',
+                                        pointBackgroundColor: '#f43f5e'
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } },
+                                scales: {
+                                    r: {
+                                        angleLines: { color: '#1e293b' },
+                                        grid: { color: '#1e293b' },
+                                        pointLabels: { color: '#94a3b8', font: { size: 9 } },
+                                        ticks: { display: false }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    // Chart 3: Active Hazard Status Breakdown (Doughnut)
+                    const ctx3 = document.getElementById('hazardChart');
+                    if (ctx3) {
+                        this.hzChartInstance = new Chart(ctx3, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Escalated', 'Pending', 'Resolved'],
+                                datasets: [{
+                                    data: cData.hazardCounts,
+                                    backgroundColor: cData.hazardColors,
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } }
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
